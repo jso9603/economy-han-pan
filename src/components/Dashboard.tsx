@@ -251,7 +251,16 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
   const [stocks, setStocks] = useState<StockData[]>(initialStocks);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
-  const [news] = useState<NewsArticle[]>(initialNews);
+  // const [news] = useState<NewsArticle[]>(initialNews);
+  const [news, setNews] = useState<NewsArticle[]>(initialNews);
+
+  useEffect(() => {
+    fetch("/api/knews")
+      .then((res) => res.json())
+      .then((data) => setNews(data))
+      .catch(() => {});
+  }, []);
+
   const [summary, setSummary] = useState<{
     text: string;
     loading: boolean;
