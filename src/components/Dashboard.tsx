@@ -323,6 +323,10 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
     }
   }, []);
 
+  useEffect(() => {
+    refetchStocks();
+  }, [refetchStocks]);
+
   // AI 요약 생성 (하루 1번 캐시됨 → 버튼 눌러도 서버 캐시 반환)
   const generateSummary = useCallback(async () => {
     setSummary({ text: "", loading: true });
