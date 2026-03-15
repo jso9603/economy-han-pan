@@ -345,17 +345,24 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
     }
   }, []);
 
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  });
-  const timeStr = now.toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+  }, []);
+
+  const dateStr =
+    now?.toLocaleDateString("ko-KR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      weekday: "short",
+    }) ?? "";
+  const timeStr =
+    now?.toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }) ?? "";
 
   return (
     <div
