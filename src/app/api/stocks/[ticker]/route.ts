@@ -15,7 +15,7 @@ export async function GET(
 
   try {
     // ── 1. 가격 + 기본 메타 ──────────────────────────────────
-    const [chartRes, quoteRes, fmpRes] = await Promise.all([
+    const [chartRes, quoteRes] = await Promise.all([
       fetch(
         `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
           ticker
@@ -34,10 +34,10 @@ export async function GET(
           next: { revalidate: 300 },
         }
       ),
-      fetch(
-        `https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${process.env.FMP_API_KEY}`,
-        { next: { revalidate: 3600 } }
-      ).catch(() => null),
+      // fetch(
+      //   `https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${process.env.FMP_API_KEY}`,
+      //   { next: { revalidate: 3600 } }
+      // ).catch(() => null),
     ]);
 
     const chartData = await chartRes.json();
@@ -110,8 +110,8 @@ export async function GET(
     const changePercent =
       change !== null && prevClose ? (change / prevClose) * 100 : null;
 
-    const fmpData = fmpRes?.ok ? await fmpRes.json() : [];
-    const marketCap = fmpData?.[0]?.mktCap ?? null;
+    // const fmpData = fmpRes?.ok ? await fmpRes.json() : [];
+    // const marketCap = fmpData?.[0]?.mktCap ?? null;
     return NextResponse.json(
       {
         ticker,
@@ -127,7 +127,7 @@ export async function GET(
         // 거래량
         volume: quote?.regularMarketVolume ?? null,
         // 시가총액
-        marketCap,
+        marketCap: 0,
         // 차트용 히스토리
         history,
         // 기관 수급 (미국만)

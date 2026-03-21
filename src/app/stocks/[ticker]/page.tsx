@@ -52,8 +52,8 @@ function fmt(value: number | null, currency: string) {
     ? `₩${value.toLocaleString("ko-KR")}`
     : `$${value.toFixed(2)}`;
 }
-function fmtLarge(value: number | null) {
-  if (value === null) return "—";
+function fmtLarge(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
   if (value >= 1e12) return `${(value / 1e12).toFixed(1)}조`;
   if (value >= 1e8) return `${(value / 1e8).toFixed(1)}억`;
   if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
