@@ -20,14 +20,15 @@ interface RecommendData {
   error?: string;
 }
 
+export const dynamic = "force-dynamic"; // 추가 (맨 위에)
+
 async function getRecommendations(): Promise<RecommendData | null> {
   try {
-    const res = await fetch(
-      `${
-        process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
-      }/api/stocks/recommend`,
-      { next: { revalidate: 3600 } }
-    );
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!baseUrl) return null; // 빌드 시 스킵
+    const res = await fetch(`${baseUrl}/api/stocks/recommend`, {
+      next: { revalidate: 3600 },
+    });
     if (!res.ok) return null;
     return res.json();
   } catch {
