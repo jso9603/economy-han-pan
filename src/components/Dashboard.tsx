@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { StockData, WeatherData, NewsArticle } from "@/types";
 import NewsSection from "@/components/NewsSection";
 
@@ -31,6 +32,14 @@ function timeAgo(dateStr: string): string {
   const m = Math.floor((diff % 3600000) / 60000);
   if (h > 0) return `${h}시간 전`;
   return `${m}분 전`;
+}
+
+// ─── 검색 결과 타입 ───────────────────────────────────────────────────────────
+interface SearchResult {
+  ticker: string;
+  name: string;
+  exchange: string;
+  isKorean: boolean;
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
@@ -170,76 +179,6 @@ function WeatherWidget({
   );
 }
 
-function NewsCard({ article }: { article: NewsArticle }) {
-  return (
-    <a
-      href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ textDecoration: "none" }}
-    >
-      <div
-        style={{
-          padding: "14px 16px",
-          borderRadius: 10,
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          transition: "all 0.2s",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "rgba(255,255,255,0.06)";
-          e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-          e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
-        }}
-      >
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: "#e8e8e8",
-            lineHeight: 1.4,
-            marginBottom: 6,
-          }}
-        >
-          {article.title}
-        </div>
-        {article.description && (
-          <div
-            style={{
-              fontSize: 11,
-              color: "#666",
-              lineHeight: 1.4,
-              marginBottom: 8,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-            }}
-          >
-            {article.description}
-          </div>
-        )}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 10,
-            color: "#555",
-          }}
-        >
-          <span style={{ color: "#00e5a0", fontWeight: 600 }}>
-            {article.source}
-          </span>
-          <span>{timeAgo(article.publishedAt)}</span>
-        </div>
-      </div>
-    </a>
-  );
-}
-
 // ─── Main Dashboard ──────────────────────────────────────────────────────────
 
 interface Props {
@@ -251,9 +190,64 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
   const [stocks, setStocks] = useState<StockData[]>(initialStocks);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
-  // const [news] = useState<NewsArticle[]>(initialNews);
   const [news, setNews] = useState<NewsArticle[]>(initialNews);
+  const [summary, setSummary] = useState<{
+    text: string;
+    loading: boolean;
+    error?: string;
+    generatedAt?: string;
+  }>({ text: "", loading: false });
+  const [stocksLoading, setStocksLoading] = useState(false);
 
+  // ── 검색 state ──────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const router = useRouter();
+
+  // 검색 디바운스
+  useEffect(() => {
+    if (searchQuery.trim().length < 1) {
+      setSearchResults([]);
+      setSearchOpen(false);
+      return;
+    }
+    clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await fetch(
+          `/api/stocks/search?q=${encodeURIComponent(searchQuery)}`
+        );
+        const data = await res.json();
+        setSearchResults(data.results ?? []);
+        setSearchOpen(true);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(searchDebounceRef.current);
+  }, [searchQuery]);
+
+  // 바깥 클릭 시 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!searchRef.current?.contains(e.target as Node)) setSearchOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSearchSelect = (ticker: string) => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    router.push(`/stocks/${encodeURIComponent(ticker)}`);
+  };
+
+  // ── 뉴스 ────────────────────────────────────────────────────────────────
   useEffect(() => {
     fetch("/api/knews")
       .then((res) => res.json())
@@ -261,18 +255,7 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
       .catch(() => {});
   }, []);
 
-  const [summary, setSummary] = useState<{
-    text: string;
-    loading: boolean;
-    error?: string;
-    generatedAt?: string;
-  }>({
-    text: "",
-    loading: false,
-  });
-  const [stocksLoading, setStocksLoading] = useState(false);
-
-  // 날씨: 브라우저 geolocation → /api/weather (서버가 OpenWeatherMap 호출)
+  // ── 날씨 ────────────────────────────────────────────────────────────────
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       async ({ coords: { latitude, longitude } }) => {
@@ -311,7 +294,7 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
     );
   }, []);
 
-  // 주가 수동 새로고침
+  // ── 주가 새로고침 ────────────────────────────────────────────────────────
   const refetchStocks = useCallback(async () => {
     setStocksLoading(true);
     try {
@@ -327,7 +310,7 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
     refetchStocks();
   }, [refetchStocks]);
 
-  // AI 요약 생성 (하루 1번 캐시됨 → 버튼 눌러도 서버 캐시 반환)
+  // ── AI 요약 ─────────────────────────────────────────────────────────────
   const generateSummary = useCallback(async () => {
     setSummary({ text: "", loading: true });
     try {
@@ -345,12 +328,11 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
     }
   }, []);
 
+  // ── 시간 ────────────────────────────────────────────────────────────────
   const [now, setNow] = useState<Date | null>(null);
-
   useEffect(() => {
     setNow(new Date());
   }, []);
-
   const dateStr =
     now?.toLocaleDateString("ko-KR", {
       year: "numeric",
@@ -359,10 +341,8 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
       weekday: "short",
     }) ?? "";
   const timeStr =
-    now?.toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }) ?? "";
+    now?.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) ??
+    "";
 
   return (
     <div
@@ -382,11 +362,11 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
         * { box-sizing: border-box; }
       `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div
         style={{
           borderBottom: "1px solid rgba(255,255,255,0.07)",
-          padding: "20px 32px",
+          padding: "14px 32px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -394,10 +374,19 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
           backdropFilter: "blur(20px)",
           position: "sticky",
           top: 0,
-          zIndex: 10,
+          zIndex: 100,
+          gap: 16,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        {/* 로고 + 날짜 */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            flexShrink: 0,
+          }}
+        >
           <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5 }}>
             <span style={{ color: "#00e5a0" }}>경제</span> 한 판
           </div>
@@ -412,11 +401,153 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
             {dateStr} · {timeStr}
           </div>
         </div>
+
+        {/* 검색창 */}
+        <div
+          ref={searchRef}
+          style={{ position: "relative", flex: 1, maxWidth: 420 }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10,
+              padding: "8px 14px",
+              gap: 8,
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#555"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="종목 검색  (삼성전자, 구글, AAPL...)"
+              style={{
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: "#e8e8e8",
+                fontSize: 13,
+              }}
+            />
+            {searchLoading && (
+              <span style={{ fontSize: 11, color: "#555", flexShrink: 0 }}>
+                검색 중…
+              </span>
+            )}
+          </div>
+
+          {/* 검색 드롭다운 */}
+          {searchOpen && (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                left: 0,
+                right: 0,
+                background: "#161616",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 12,
+                overflow: "hidden",
+                zIndex: 200,
+                boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
+              }}
+            >
+              {searchResults.length > 0 ? (
+                searchResults.map((r) => (
+                  <button
+                    key={r.ticker}
+                    onClick={() => handleSearchSelect(r.ticker)}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      width: "100%",
+                      padding: "11px 16px",
+                      background: "transparent",
+                      border: "none",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background =
+                        "rgba(255,255,255,0.05)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
+                  >
+                    <div>
+                      <span
+                        style={{
+                          color: "#e8e8e8",
+                          fontWeight: 600,
+                          fontSize: 13,
+                        }}
+                      >
+                        {r.name}
+                      </span>
+                      <span
+                        style={{ color: "#555", fontSize: 11, marginLeft: 8 }}
+                      >
+                        {r.ticker}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: 20,
+                        flexShrink: 0,
+                        background: r.isKorean
+                          ? "rgba(74,222,128,0.1)"
+                          : "rgba(96,165,250,0.1)",
+                        color: r.isKorean ? "#4ade80" : "#60a5fa",
+                      }}
+                    >
+                      {r.isKorean ? "KR" : "US"}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div
+                  style={{
+                    padding: "16px",
+                    textAlign: "center",
+                    color: "#555",
+                    fontSize: 13,
+                  }}
+                >
+                  검색 결과가 없습니다
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 새로고침 버튼 */}
         <button
           onClick={refetchStocks}
           disabled={stocksLoading}
           style={{
             padding: "7px 14px",
+            flexShrink: 0,
             background: "rgba(255,255,255,0.05)",
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 8,
@@ -429,6 +560,7 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
         </button>
       </div>
 
+      {/* ── Body ── */}
       <div
         style={{
           maxWidth: 1200,
@@ -437,12 +569,12 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
           animation: "fadeIn 0.5s ease",
         }}
       >
-        {/* Weather */}
+        {/* 날씨 */}
         <div style={{ marginBottom: 28 }}>
           <WeatherWidget weather={weather} loading={weatherLoading} />
         </div>
 
-        {/* Stocks */}
+        {/* 주요 지수 */}
         <section style={{ marginBottom: 32 }}>
           <div
             style={{
@@ -463,7 +595,7 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
           </div>
         </section>
 
-        {/* Main Grid */}
+        {/* 메인 그리드 */}
         <div
           style={{
             display: "grid",
@@ -472,26 +604,12 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
             alignItems: "start",
           }}
         >
-          {/* News */}
-          {/* <section>
-            <div style={{ fontSize: 11, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 14, fontWeight: 600 }}>
-              🌍 글로벌 경제 뉴스
-            </div>
-            {news.length === 0 ? (
-              <div style={{ padding: 20, background: "rgba(255,92,124,0.08)", border: "1px solid rgba(255,92,124,0.2)", borderRadius: 10, fontSize: 13, color: "#ff5c7c" }}>
-                ⚠️ 뉴스를 불러오지 못했어요. .env.local의 NEWS_API_KEY를 확인해주세요.
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {news.map((a, i) => <NewsCard key={i} article={a} />)}
-              </div>
-            )}
-          </section> */}
+          {/* 뉴스 */}
           <section>
             <NewsSection news={news} />
           </section>
 
-          {/* AI Summary + Quick Stats */}
+          {/* AI 요약 + 시장 요약 */}
           <section style={{ position: "sticky", top: 80 }}>
             <div
               style={{
@@ -608,7 +726,7 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
               )}
             </div>
 
-            {/* Quick Stats */}
+            {/* 시장 요약 */}
             <div
               style={{
                 marginTop: 16,
@@ -658,9 +776,9 @@ export default function Dashboard({ initialStocks, initialNews }: Props) {
                         style={{
                           fontSize: 10,
                           marginLeft: 6,
+                          fontFamily: "monospace",
                           color:
                             (s.changePercent ?? 0) >= 0 ? "#00e5a0" : "#ff5c7c",
-                          fontFamily: "monospace",
                         }}
                       >
                         {s.changePercent !== null
