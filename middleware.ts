@@ -1,4 +1,9 @@
-// export { default } from "next-auth/middleware";
+import { NextResponse } from "next/server";
+
+export function middleware() {
+  return NextResponse.next();
+}
+("next-auth/middleware");
 
 export const config = {
   // matcher: [
