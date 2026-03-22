@@ -194,7 +194,8 @@ function StockCard({ stock }: { stock: StockRec }) {
 }
 
 export default async function StocksPage() {
-  const data = await getRecommendations();
+  const raw = await getRecommendations();
+  const data = raw?.shortTerm && raw?.longTerm ? raw : null;
 
   return (
     <div
@@ -255,7 +256,7 @@ export default async function StocksPage() {
         <StockSearch />
       </div>
 
-      {data?.error || !data ? (
+      {!data ? (
         <div
           style={{
             background: "#111",
