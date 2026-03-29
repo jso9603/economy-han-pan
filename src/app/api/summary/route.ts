@@ -12,15 +12,22 @@ export const revalidate = 86400; // 24시간 캐시
 export async function POST() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "서버 환경변수 누락: ANTHROPIC_API_KEY" }, { status: 500 });
+    return NextResponse.json(
+      { error: "서버 환경변수 누락: ANTHROPIC_API_KEY" },
+      { status: 500 }
+    );
   }
 
   // 최신 주가/뉴스 데이터를 서버 내부에서 직접 가져옴
   try {
     // 주가 데이터 가져오기 (캐시 활용)
     const [stocksRes, newsRes] = await Promise.all([
-      fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/stocks`, { next: { revalidate: 300 } }),
-      fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/news`, { next: { revalidate: 3600 } }),
+      fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/stocks`, {
+        next: { revalidate: 300 },
+      }),
+      fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/news`, {
+        next: { revalidate: 3600 },
+      }),
     ]);
 
     const stocks = await stocksRes.json();
@@ -28,8 +35,18 @@ export async function POST() {
 
     const stockText = stocks
       .filter((s: { error?: string }) => !s.error)
-      .map((s: { label: string; price: number; changePercent: number; symbol: string }) =>
-        `${s.label}: ${s.symbol === "KRW=X" ? `${s.price?.toFixed(0)}원` : s.price?.toFixed(2)} (${s.changePercent >= 0 ? "+" : ""}${s.changePercent?.toFixed(2)}%)`
+      .map(
+        (s: {
+          label: string;
+          price: number;
+          changePercent: number;
+          symbol: string;
+        }) =>
+          `${s.label}: ${
+            s.symbol === "KRW=X"
+              ? `${s.price?.toFixed(0)}원`
+              : s.price?.toFixed(2)
+          } (${s.changePercent >= 0 ? "+" : ""}${s.changePercent?.toFixed(2)}%)`
       )
       .join(", ");
 
@@ -39,7 +56,9 @@ export async function POST() {
       .join("\n");
 
     const today = new Date().toLocaleDateString("ko-KR", {
-      year: "numeric", month: "long", day: "numeric",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
 
     const client = new Anthropic({ apiKey });
@@ -62,12 +81,16 @@ ${newsText}
       ],
     });
 
-    const text = message.content[0].type === "text" ? message.content[0].text : "";
+    const text =
+      message.content[0].type === "text" ? message.content[0].text : "";
 
     return NextResponse.json(
       { text, generatedAt: new Date().toISOString() },
       {
-        headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600" },
+        headers: {
+          "Cache-Control":
+            "public, s-maxage=86400, stale-while-revalidate=3600",
+        },
       }
     );
   } catch (e: unknown) {

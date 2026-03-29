@@ -99,7 +99,9 @@ async function fetchPrices(tickers: string[]) {
 
 // ── Claude API로 추천 종목 선정 ────────────────────────────────
 async function analyzeWithClaude(priceData: any[]): Promise<RecommendResult> {
+  console.log("3333");
   const apiKey = process.env.ANTHROPIC_API_KEY;
+  console.log(apiKey);
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY 환경변수가 없습니다.");
 
   const prompt = `다음은 오늘 주요 주식들의 시장 데이터입니다:
